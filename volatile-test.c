@@ -70,14 +70,15 @@ void generate_pressure(megs)
 
 int main(int argc, char *argv[])
 {
-	int i, purged;
+	int i,j, purged;
 	char* file = NULL;
 	int fd;
 	int pressure = 0;
 	int opt;
+	int signal = 0;
 
         /* Process arguments */
-        while ((opt = getopt(argc, argv, "p:f:"))!=-1) {
+        while ((opt = getopt(argc, argv, "p:f:s"))!=-1) {
                 switch(opt) {
                 case 'p':
                         pressure = atoi(optarg);
@@ -85,6 +86,9 @@ int main(int argc, char *argv[])
                 case 'f':
                         file = optarg;
                         break;
+		case 's':
+			signal = 1;
+			break;
                 default:
                         printf("Usage: %s [-p <mempressure in megs>] [-f <filename>]\n", argv[0]);
                         printf("        -p: Amount of memory pressure to generate\n");
@@ -112,9 +116,17 @@ int main(int argc, char *argv[])
 		mvolatile(vaddr + (i*CHUNK), CHUNK);
 		i+=2;
 	}
-
 	printf("Generating %i megs of pressure\n", pressure);
 	generate_pressure(pressure);
+
+	/* try to force sig-bus */
+	if (signal) {
+		for(i=0; i < CHUNKNUM; i++) {
+			for (j=0; j < CHUNK/PAGE_SIZE; j++)
+				printf("%c", vaddr[i*CHUNK+j*PAGE_SIZE]);
+			printf("\n");
+		}
+	}
 
 	purged = 0;
 	for(i=0; i < CHUNKNUM; ) {
@@ -127,8 +139,11 @@ int main(int argc, char *argv[])
 	if (purged)
 		printf("Data purged!\n");
 
-	for(i=0; i < CHUNKNUM; i++)
-		printf("%c\n", vaddr[i*CHUNK]);
+	for(i=0; i < CHUNKNUM; i++) {
+		for (j=0; j < CHUNK/PAGE_SIZE; j++)
+			printf("%c", vaddr[i*CHUNK+j*PAGE_SIZE]);
+		printf("\n");
+	}
 	
 
 
