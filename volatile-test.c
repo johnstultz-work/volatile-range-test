@@ -12,10 +12,10 @@
 #include <fcntl.h>
 #include <sys/syscall.h>
 
-#define SYS_vrange 314
+#define SYS_vrange 316
 
-#define VRANGE_VOLATILE	0	/* unpin all pages so VM can discard them */
-#define VRANGE_NOVOLATILE	1	/* pin all pages so VM can't discard them */
+#define VRANGE_NOVOLATILE 0	/* pin all pages so VM can't discard them */
+#define VRANGE_VOLATILE	1	/* unpin all pages so VM can discard them */
 
 #define VRANGE_MODE_SHARED 0x1	/* discard all pages of the range */
 
@@ -23,27 +23,28 @@
 
 #define VRANGE_MODE 0x1
 
-static int vrange(unsigned long start, size_t length, int mode, int *purged)
+static ssize_t vrange(unsigned long start, size_t length,
+		unsigned long mode, unsigned long flags, int *purged)
 {
-	return syscall(SYS_vrange, start, length, mode, purged);
+	return syscall(SYS_vrange, start, length, mode, flags, purged);
 }
 
 
-static int mvolatile(void *addr, size_t length)
+static ssize_t mvolatile(void *addr, size_t length)
 {
-	return vrange((long)addr, length, VRANGE_VOLATILE, 0);
+	return vrange((long)addr, length, VRANGE_VOLATILE, 0, 0);
 }
 
 
-static int mnovolatile(void *addr, size_t length, int* purged)
+static ssize_t mnovolatile(void *addr, size_t length, int* purged)
 {
-	return vrange((long)addr, length, VRANGE_NOVOLATILE, purged);
+	return vrange((long)addr, length, VRANGE_NOVOLATILE, 0, purged);
 }
 
 
 char* vaddr;
 #define PAGE_SIZE (4*1024)
-#define CHUNK (4*1024*4)
+#define CHUNK (PAGE_SIZE*16)
 #define CHUNKNUM 26
 #define FULLSIZE (CHUNK*CHUNKNUM + 2*PAGE_SIZE)
 
