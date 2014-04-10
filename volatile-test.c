@@ -12,37 +12,19 @@
 #include <fcntl.h>
 #include <sys/syscall.h>
 
-#define SYS_vrange 316
+#define SYS_mvolatile 316
 
-#define VRANGE_NOVOLATILE 0	/* pin all pages so VM can't discard them */
-#define VRANGE_VOLATILE	1	/* unpin all pages so VM can discard them */
-
-#define VRANGE_MODE_SHARED 0x1	/* discard all pages of the range */
+#define MVOLATILE_NONVOLATILE 0
+#define MVOLATILE_VOLATILE 1
 
 
-
-#define VRANGE_MODE 0x1
-
-static ssize_t vrange(unsigned long start, size_t length,
+static ssize_t mvolatile(unsigned long start, size_t length,
 		unsigned long mode, unsigned long flags, int *purged)
 {
-	return syscall(SYS_vrange, start, length, mode, flags, purged);
+	return syscall(SYS_mvolatile, start, length, mode, flags, purged);
 }
 
 
-static ssize_t mvolatile(void *addr, size_t length)
-{
-	return vrange((long)addr, length, VRANGE_VOLATILE, 0, 0);
-}
-
-
-static ssize_t mnovolatile(void *addr, size_t length, int* purged)
-{
-	return vrange((long)addr, length, VRANGE_NOVOLATILE, 0, purged);
-}
-
-
-char* vaddr;
 #define PAGE_SIZE (4*1024)
 #define CHUNK (PAGE_SIZE*16)
 #define CHUNKNUM 26
@@ -76,26 +58,28 @@ int main(int argc, char *argv[])
 	int pressure = 0;
 	int opt;
 	int signal = 0;
+	char* vaddr;
 
-        /* Process arguments */
-        while ((opt = getopt(argc, argv, "p:f:s"))!=-1) {
-                switch(opt) {
-                case 'p':
-                        pressure = atoi(optarg);
-                        break;
-                case 'f':
-                        file = optarg;
-                        break;
+	/* Process arguments */
+	while ((opt = getopt(argc, argv, "p:f:s"))!=-1) {
+		switch(opt) {
+		case 'p':
+			pressure = atoi(optarg);
+			break;
+		case 'f':
+			file = optarg;
+			break;
 		case 's':
 			signal = 1;
 			break;
-                default:
-                        printf("Usage: %s [-p <mempressure in megs>] [-f <filename>]\n", argv[0]);
-                        printf("        -p: Amount of memory pressure to generate\n");
-                        printf("        -f: Use a file\n");
+		default:
+			printf("Usage: %s [-p <mempressure in megs>] [-f <filename>] -s\n", argv[0]);
+			printf("        -p: Amount of memory pressure to generate\n");
+			printf("        -f: Use a file\n");
+			printf("	-s: Traverse volatile data (trigger SIGBUS)\n");
                         exit(-1);
-                }
-        }
+		}
+	}
 
 	if (file) {
 		printf("Using file %s\n", file);
@@ -113,7 +97,10 @@ int main(int argc, char *argv[])
 
 
 	for(i=0; i < CHUNKNUM; ) {
-		mvolatile(vaddr + (i*CHUNK), CHUNK);
+		ssize_t ret;
+		ret = mvolatile((long)(vaddr + (i*CHUNK)), CHUNK, MVOLATILE_VOLATILE, 0, 0);
+		if (ret != CHUNK)
+			printf("Did not set full chunk volatile!\n");
 		i+=2;
 	}
 	printf("Generating %i megs of pressure\n", pressure);
@@ -131,7 +118,12 @@ int main(int argc, char *argv[])
 	purged = 0;
 	for(i=0; i < CHUNKNUM; ) {
 		int tmp_purged = 0;
-		mnovolatile(vaddr + (i*CHUNK), CHUNK, &tmp_purged);
+		ssize_t ret;
+		ret = mvolatile((long)(vaddr + (i*CHUNK)), CHUNK, MVOLATILE_NONVOLATILE, 0,
+				&tmp_purged);
+		if (ret != CHUNK)
+			printf("Did not set full chunk non-volatile!\n");
+
 		purged |= tmp_purged;
 		i+=2;
 	}
